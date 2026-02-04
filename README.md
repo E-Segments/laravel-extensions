@@ -2,8 +2,25 @@
 
 A minimal, type-safe extension points system for Laravel applications.
 
-**NOT WordPress-style** (no global `addAction`/`applyFilters` with string names).
-**NOT discovery-based** - Manual registration in service providers for explicit, predictable behavior.
+[![PHP Version](https://img.shields.io/badge/php-%3E%3D8.2-8892BF.svg)](https://php.net/)
+[![Laravel](https://img.shields.io/badge/laravel-11.x%20%7C%2012.x-FF2D20.svg)](https://laravel.com)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
+---
+
+## Why This Package?
+
+Ever wanted to let other parts of your application (or other packages) hook into specific moments? Like WordPress hooks, but **type-safe** and **Laravel-native**?
+
+This package gives you:
+
+- **Type-safe hooks** - Use PHP classes instead of magic strings
+- **IDE friendly** - Full autocomplete and refactoring support
+- **Priority control** - Define execution order for handlers
+- **Veto capability** - Let handlers cancel operations
+- **Zero magic** - Explicit registration, predictable behavior
+
+---
 
 ## Installation
 
@@ -11,293 +28,336 @@ A minimal, type-safe extension points system for Laravel applications.
 composer require esegments/laravel-extensions
 ```
 
-The package auto-registers its service provider.
+The package auto-registers itself. No additional setup needed!
+
+---
 
 ## Quick Start
 
-### 1. Define an Extension Point
+### 1. Create an Extension Point
+
+Think of an extension point as a "hook" - a moment in your code where others can plug in.
 
 ```php
-use Esegments\LaravelExtensions\Contracts\ExtensionPointContract;
 use Esegments\LaravelExtensions\Contracts\InterruptibleContract;
 use Esegments\LaravelExtensions\Concerns\InterruptibleTrait;
 
-final class ValidateOrderExtension implements InterruptibleContract
+class BeforeOrderPlaced implements InterruptibleContract
 {
     use InterruptibleTrait;
 
-    public array $errors = [];
+    public array $warnings = [];
 
     public function __construct(
         public readonly Order $order,
         public readonly Customer $customer,
     ) {}
 
-    public function addError(string $error): void
+    public function addWarning(string $message): void
     {
-        $this->errors[] = $error;
+        $this->warnings[] = $message;
     }
 }
 ```
 
-### 2. Define a Handler
+### 2. Create a Handler
+
+Handlers respond to extension points. They can validate, modify data, or perform side effects.
 
 ```php
 use Esegments\LaravelExtensions\Contracts\ExtensionHandlerContract;
 use Esegments\LaravelExtensions\Contracts\ExtensionPointContract;
 
-final class CheckInventoryHandler implements ExtensionHandlerContract
+class CheckInventoryHandler implements ExtensionHandlerContract
 {
     public function __construct(
         private readonly InventoryService $inventory,
     ) {}
 
-    public function handle(ExtensionPointContract $extensionPoint): mixed
+    public function handle(ExtensionPointContract $point): mixed
     {
-        if (! $extensionPoint instanceof ValidateOrderExtension) {
+        if (! $point instanceof BeforeOrderPlaced) {
             return null;
         }
 
-        foreach ($extensionPoint->order->items as $item) {
-            if (! $this->inventory->hasStock($item->product_id, $item->quantity)) {
-                $extensionPoint->addError("Insufficient stock for {$item->product_id}");
+        foreach ($point->order->items as $item) {
+            if (! $this->inventory->inStock($item->product_id, $item->quantity)) {
+                $point->addWarning("Low stock for {$item->name}");
             }
         }
 
-        // Return false to interrupt/veto
-        return ! empty($extensionPoint->errors) ? false : null;
+        return null; // Return false to cancel the operation
     }
 }
 ```
 
-### 3. Register Handlers (in Service Provider)
+### 3. Register Your Handler
+
+Register handlers in a service provider:
 
 ```php
 use Esegments\LaravelExtensions\Facades\Extensions;
 
-public function boot(): void
+class AppServiceProvider extends ServiceProvider
 {
-    // Using handler class
-    Extensions::register(
-        ValidateOrderExtension::class,
-        CheckInventoryHandler::class,
-        priority: 10,  // Lower = runs first
-    );
+    public function boot(): void
+    {
+        // Using a handler class
+        Extensions::register(
+            BeforeOrderPlaced::class,
+            CheckInventoryHandler::class,
+            priority: 10  // Lower = runs first
+        );
 
-    // Using closure
-    Extensions::register(
-        ValidateOrderExtension::class,
-        fn (ValidateOrderExtension $ext) => $ext->order->total > 10000
-            ? $ext->addError('Orders over $10k require approval')
-            : null,
-        priority: 20,
-    );
+        // Or use a simple closure
+        Extensions::register(
+            BeforeOrderPlaced::class,
+            fn (BeforeOrderPlaced $point) => logger('Order being placed', [
+                'order_id' => $point->order->id,
+            ]),
+            priority: 100
+        );
+    }
 }
 ```
 
-### 4. Dispatch Extension Point
+### 4. Dispatch the Extension Point
 
 ```php
 use Esegments\LaravelExtensions\Facades\Extensions;
 
-$extension = new ValidateOrderExtension($order, $customer);
-$canProceed = Extensions::dispatchInterruptible($extension);
+class OrderService
+{
+    public function placeOrder(Order $order, Customer $customer): OrderResult
+    {
+        // Create and dispatch the extension point
+        $hook = new BeforeOrderPlaced($order, $customer);
+        $canProceed = Extensions::dispatchInterruptible($hook);
 
-if (! $canProceed || ! empty($extension->errors)) {
-    return response()->json([
-        'success' => false,
-        'errors' => $extension->errors,
-        'interrupted_by' => $extension->getInterruptedBy(),
-    ], 422);
+        // Check if any handler vetoed the operation
+        if (! $canProceed) {
+            return OrderResult::blocked(
+                reason: "Blocked by: {$hook->getInterruptedBy()}"
+            );
+        }
+
+        // Check for warnings
+        if (! empty($hook->warnings)) {
+            // Maybe notify someone, but continue...
+        }
+
+        // Proceed with the order...
+        return $this->processOrder($order);
+    }
 }
-
-// Proceed with order...
 ```
 
-## Contracts
+---
 
-### ExtensionPointContract
+## Extension Point Types
 
-Marker interface for extension points. Extension points are typed PHP classes that define specific points in your application where handlers can be registered.
+### Basic Extension Point
 
-### InterruptibleContract
-
-Extension points that can be vetoed/interrupted. When a handler returns `false`, no further handlers execute.
+For simple notifications or side effects:
 
 ```php
-final class BeforeDeleteExtension implements InterruptibleContract
+use Esegments\LaravelExtensions\Contracts\ExtensionPointContract;
+
+class UserRegistered implements ExtensionPointContract
+{
+    public function __construct(
+        public readonly User $user,
+    ) {}
+}
+```
+
+### Interruptible Extension Point
+
+When handlers should be able to **cancel** an operation:
+
+```php
+use Esegments\LaravelExtensions\Contracts\InterruptibleContract;
+use Esegments\LaravelExtensions\Concerns\InterruptibleTrait;
+
+class BeforeAccountDelete implements InterruptibleContract
 {
     use InterruptibleTrait;
 
     public function __construct(
-        public readonly Model $model,
+        public readonly User $user,
     ) {}
 }
 
-// Handler can veto deletion
-Extensions::register(BeforeDeleteExtension::class, function ($ext) {
-    if ($ext->model->is_protected) {
-        return false; // Veto!
+// Handler can return false to veto
+Extensions::register(BeforeAccountDelete::class, function ($point) {
+    if ($point->user->hasActiveSubscription()) {
+        return false; // Block deletion!
     }
 });
 ```
 
-### PipeableContract
+### Pipeable Extension Point
 
-Extension points that allow data transformation. Handlers modify the extension point's data in sequence.
+When handlers should **transform** data:
 
 ```php
-final class CalculatePriceExtension implements PipeableContract
+use Esegments\LaravelExtensions\Contracts\PipeableContract;
+
+class CalculatePrice implements PipeableContract
 {
     public function __construct(
         public readonly Product $product,
-        public float $price,
+        public float $price,  // Mutable!
     ) {}
 }
 
-// Handler 1: Apply discount
-Extensions::register(CalculatePriceExtension::class, function ($ext) {
-    $ext->price *= 0.9;
+// Handlers modify the price in sequence
+Extensions::register(CalculatePrice::class, function ($point) {
+    $point->price *= 0.9;  // 10% discount
 }, priority: 10);
 
-// Handler 2: Apply tax
-Extensions::register(CalculatePriceExtension::class, function ($ext) {
-    $ext->price *= 1.1;
+Extensions::register(CalculatePrice::class, function ($point) {
+    $point->price *= 1.08;  // Add 8% tax
 }, priority: 20);
 ```
 
-### ExtensionHandlerContract
-
-Contract for handler classes that process extension points.
-
-```php
-final class MyHandler implements ExtensionHandlerContract
-{
-    public function handle(ExtensionPointContract $extensionPoint): mixed
-    {
-        // Handle the extension point
-        return null; // or false to interrupt
-    }
-}
-```
+---
 
 ## Priority System
 
-| Range | Purpose |
-|-------|---------|
-| 0-49 | Critical (veto checks, security) |
-| 50-99 | High (cache invalidation) |
-| 100-149 | Normal (default: 100) |
-| 150-199 | Low (notifications) |
-| 200+ | Very low (analytics) |
+Handlers run in priority order. **Lower numbers run first**.
 
-Lower values run first.
+| Range | Use Case | Example |
+|-------|----------|---------|
+| `0-49` | Critical checks | Security validation, fraud detection |
+| `50-99` | High priority | Cache invalidation, inventory checks |
+| `100-149` | Normal (default) | Business logic, notifications |
+| `150-199` | Low priority | Analytics, logging |
+| `200+` | Background | Cleanup, stats collection |
+
+```php
+// Fraud check runs first (priority 5)
+Extensions::register(BeforePayment::class, FraudDetectionHandler::class, priority: 5);
+
+// Then inventory check (priority 50)
+Extensions::register(BeforePayment::class, InventoryHandler::class, priority: 50);
+
+// Then send notification (priority 150)
+Extensions::register(BeforePayment::class, NotifyWarehouseHandler::class, priority: 150);
+```
+
+---
 
 ## Dispatcher Methods
 
 ```php
-// Dispatch and get the extension point back
-$ext = Extensions::dispatch($extensionPoint);
+use Esegments\LaravelExtensions\Facades\Extensions;
 
-// Dispatch interruptible and get boolean
+// Basic dispatch - runs all handlers, returns the extension point
+$point = Extensions::dispatch($extensionPoint);
+
+// For interruptible - returns true if can proceed, false if vetoed
 $canProceed = Extensions::dispatchInterruptible($extensionPoint);
 
-// Dispatch without triggering Laravel events
-$ext = Extensions::dispatchSilent($extensionPoint);
+// Silent dispatch - skips Laravel event integration
+$point = Extensions::dispatchSilent($extensionPoint);
 
-// Check if handlers exist
-$hasHandlers = Extensions::hasHandlers(MyExtension::class);
+// Check if any handlers exist
+if (Extensions::hasHandlers(MyExtension::class)) {
+    // ...
+}
 ```
+
+---
 
 ## Laravel Event Integration
 
-Extension points are also dispatched as Laravel events:
+Extension points are also dispatched as Laravel events! This means you can use standard Laravel event listeners too:
 
 ```php
 // In EventServiceProvider
 protected $listen = [
-    ValidateOrderExtension::class => [
-        LogOrderValidation::class,
+    BeforeOrderPlaced::class => [
+        SendSlackNotification::class,
     ],
 ];
 ```
 
-Disable in config:
+To disable this (dispatch only to registered handlers):
 
 ```php
 // config/extensions.php
 'dispatch_as_events' => false,
 ```
 
-## Registry Access
+---
 
-```php
-use Esegments\LaravelExtensions\Facades\Extensions;
+## Configuration
 
-// Get the registry
-$registry = Extensions::registry();
+Publish the config file:
 
-// Register directly
-$registry->register(MyExtension::class, MyHandler::class);
-
-// Check handlers
-$registry->hasHandlers(MyExtension::class);
-$registry->countHandlers(MyExtension::class);
-
-// Get handlers with priorities
-$registry->getHandlersWithPriorities(MyExtension::class);
-
-// Clear handlers
-$registry->forget(MyExtension::class);
-$registry->clear();
+```bash
+php artisan vendor:publish --tag=extensions-config
 ```
-
-## Octane Support
-
-The package is Octane-safe. Handlers are registered in service providers which are only executed once per worker.
-
-If you need to clear handlers between requests (unusual), enable in config:
 
 ```php
 // config/extensions.php
-'clear_on_octane_terminate' => true,
+return [
+    // Also dispatch as Laravel events?
+    'dispatch_as_events' => true,
+
+    // Clear handlers between Octane requests?
+    'clear_on_octane_terminate' => false,
+];
 ```
+
+---
 
 ## Testing
 
 ```php
 use Esegments\LaravelExtensions\Facades\Extensions;
 
-public function test_order_validation(): void
+public function test_order_can_be_blocked(): void
 {
     // Clear any existing handlers
     Extensions::registry()->clear();
 
-    // Register test handler
+    // Register a handler that always blocks
     Extensions::register(
-        ValidateOrderExtension::class,
-        fn ($ext) => $ext->addError('Test error'),
+        BeforeOrderPlaced::class,
+        fn () => false,  // Veto!
     );
 
-    $ext = new ValidateOrderExtension($order, $customer);
-    Extensions::dispatch($ext);
+    $point = new BeforeOrderPlaced($order, $customer);
+    $canProceed = Extensions::dispatchInterruptible($point);
 
-    $this->assertEquals(['Test error'], $ext->errors);
+    $this->assertFalse($canProceed);
+    $this->assertTrue($point->wasInterrupted());
 }
 ```
 
-## Comparison
+---
 
-| Aspect | WordPress Hooks | Laravel Extensions |
-|--------|-----------------|-------------------|
-| Type Safety | String names | Typed PHP classes |
-| IDE Support | None | Full auto-complete |
-| Registration | Global functions | Service provider |
-| Testability | Global state | Container-based |
-| Veto | Complex | Return `false` |
-| Octane | Static arrays | Container singleton |
-| Complexity | High | Minimal |
+## Comparison with Other Approaches
+
+| Feature | Laravel Extensions | WordPress Hooks | Laravel Events |
+|---------|-------------------|-----------------|----------------|
+| Type safety | Full PHP classes | String names | Class-based |
+| IDE support | Full autocomplete | None | Partial |
+| Veto capability | Built-in | Complex | Manual |
+| Priority order | Built-in | Built-in | Manual |
+| Data transformation | PipeableContract | Filter hooks | Manual |
+| Testability | Container-based | Global state | Good |
+
+---
 
 ## License
 
-MIT
+MIT License. See [LICENSE](LICENSE) for details.
+
+---
+
+## Credits
+
+Built with care by [Esegments](https://esegments.com).
