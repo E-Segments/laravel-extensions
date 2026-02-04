@@ -1,0 +1,53 @@
+{
+    "name": "esegments/laravel-extensions",
+    "description": "A minimal, type-safe extension points system for Laravel applications",
+    "type": "library",
+    "keywords": [
+        "laravel",
+        "extensions",
+        "hooks",
+        "extension-points",
+        "type-safe"
+    ],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Esegments",
+            "email": "dev@esegments.com"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "illuminate/contracts": "^11.0|^12.0",
+        "illuminate/support": "^11.0|^12.0"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^9.0|^10.0",
+        "phpunit/phpunit": "^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Esegments\\LaravelExtensions\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Esegments\\LaravelExtensions\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Esegments\\LaravelExtensions\\ExtensionServiceProvider"
+            ],
+            "aliases": {
+                "Extensions": "Esegments\\LaravelExtensions\\Facades\\Extensions"
+            }
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "config": {
+        "sort-packages": true
+    }
+}
