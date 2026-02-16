@@ -1,0 +1,17 @@
+main:
+  - title: "Documentation"
+    url: "/laravel-extensions/docs/getting-started/"
+  - title: "GitHub"
+    url: "https://github.com/E-Segments/laravel-extensions"
+
+docs:
+  - title: "Getting Started"
+    url: "/laravel-extensions/docs/getting-started/"
+  - title: "Safety Features"
+    url: "/laravel-extensions/docs/safety/"
+  - title: "Pipelines"
+    url: "/laravel-extensions/docs/pipelines/"
+  - title: "Async Processing"
+    url: "/laravel-extensions/docs/async/"
+  - title: "Configuration"
+    url: "/laravel-extensions/docs/configuration/"
