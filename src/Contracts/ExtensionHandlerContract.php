@@ -7,15 +7,10 @@ namespace Esegments\LaravelExtensions\Contracts;
 /**
  * Contract for extension point handlers.
  *
- * Handlers process extension points when they are dispatched. Each handler
- * receives the extension point object and can:
- *
- * - Read data from the extension point
- * - Modify data if the extension point implements PipeableContract
- * - Return `false` to interrupt if the extension point implements InterruptibleContract
+ * Handlers respond to extension points and can:
+ * - Modify data (for PipeableContract extension points)
+ * - Return false to interrupt processing (for InterruptibleContract extension points)
  * - Perform side effects (logging, notifications, etc.)
- *
- * Handlers are resolved from the container, so you can inject dependencies.
  *
  * @example
  * ```php
@@ -33,7 +28,8 @@ namespace Esegments\LaravelExtensions\Contracts;
  *
  *         foreach ($extensionPoint->order->items as $item) {
  *             if (! $this->inventory->hasStock($item->product_id, $item->quantity)) {
- *                 return false; // Veto the order
+ *                 $extensionPoint->addError("Insufficient stock for {$item->product_id}");
+ *                 return false; // Interrupt processing
  *             }
  *         }
  *
@@ -47,8 +43,7 @@ interface ExtensionHandlerContract
     /**
      * Handle the extension point.
      *
-     * @param  ExtensionPointContract  $extensionPoint  The extension point to handle
-     * @return bool|void|null Return `false` to interrupt (only for InterruptibleContract)
+     * @return mixed Return false to interrupt (only for InterruptibleContract), null/void otherwise
      */
     public function handle(ExtensionPointContract $extensionPoint): mixed;
 }

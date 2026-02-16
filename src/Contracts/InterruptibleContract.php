@@ -5,13 +5,11 @@ declare(strict_types=1);
 namespace Esegments\LaravelExtensions\Contracts;
 
 /**
- * Extension points that can be vetoed/interrupted by handlers.
+ * Contract for extension points that can be interrupted (vetoed).
  *
- * When a handler returns `false` for an interruptible extension point,
- * no further handlers will be executed and the operation can be cancelled.
- *
- * Use this for validation, authorization, or any scenario where handlers
- * should be able to prevent an operation from proceeding.
+ * When a handler returns `false`, the extension point is marked as interrupted
+ * and no further handlers are executed. This is useful for validation scenarios
+ * where you want to stop processing if a condition fails.
  *
  * @example
  * ```php
@@ -24,13 +22,19 @@ namespace Esegments\LaravelExtensions\Contracts;
  *     ) {}
  * }
  *
- * // In a handler:
+ * // In handler:
  * public function handle(ExtensionPointContract $ext): mixed
  * {
  *     if ($ext->order->total > 10000) {
- *         return false; // Veto the operation
+ *         return false; // Veto the order
  *     }
  *     return null;
+ * }
+ *
+ * // In dispatcher caller:
+ * $canProceed = Extensions::dispatchInterruptible($extension);
+ * if (! $canProceed) {
+ *     echo "Interrupted by: " . $extension->getInterruptedBy();
  * }
  * ```
  */
@@ -52,7 +56,7 @@ interface InterruptibleContract extends ExtensionPointContract
     public function getInterruptedBy(): ?string;
 
     /**
-     * Set the handler class that caused the interruption.
+     * Set the class name of the handler that interrupted this extension point.
      */
     public function setInterruptedBy(string $handlerClass): void;
 }

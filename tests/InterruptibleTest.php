@@ -4,61 +4,81 @@ declare(strict_types=1);
 
 namespace Esegments\LaravelExtensions\Tests;
 
-use Esegments\LaravelExtensions\Tests\Fixtures\InterruptibleExtensionPoint;
+use Esegments\LaravelExtensions\Tests\Fixtures\InterruptibleExtension;
 
 final class InterruptibleTest extends TestCase
 {
-    public function test_extension_point_starts_not_interrupted(): void
+    public function test_interruptible_extension_is_not_interrupted_by_default(): void
     {
-        $extensionPoint = new InterruptibleExtensionPoint();
+        $extension = new InterruptibleExtension;
 
-        $this->assertFalse($extensionPoint->wasInterrupted());
-        $this->assertNull($extensionPoint->getInterruptedBy());
+        $this->assertFalse($extension->wasInterrupted());
+        $this->assertNull($extension->getInterruptedBy());
     }
 
-    public function test_can_interrupt_extension_point(): void
+    public function test_can_interrupt_extension(): void
     {
-        $extensionPoint = new InterruptibleExtensionPoint();
+        $extension = new InterruptibleExtension;
 
-        $extensionPoint->interrupt();
+        $extension->interrupt();
 
-        $this->assertTrue($extensionPoint->wasInterrupted());
+        $this->assertTrue($extension->wasInterrupted());
     }
 
     public function test_can_set_interrupted_by(): void
     {
-        $extensionPoint = new InterruptibleExtensionPoint();
+        $extension = new InterruptibleExtension;
 
-        $extensionPoint->interrupt();
-        $extensionPoint->setInterruptedBy('SomeHandler');
+        $extension->interrupt();
+        $extension->setInterruptedBy('SomeHandler');
 
-        $this->assertTrue($extensionPoint->wasInterrupted());
-        $this->assertEquals('SomeHandler', $extensionPoint->getInterruptedBy());
+        $this->assertEquals('SomeHandler', $extension->getInterruptedBy());
     }
 
-    public function test_can_add_errors(): void
+    public function test_errors_can_be_added(): void
     {
-        $extensionPoint = new InterruptibleExtensionPoint();
+        $extension = new InterruptibleExtension;
 
-        $extensionPoint->addError('Error 1');
-        $extensionPoint->addError('Error 2');
+        $extension->addError('Error 1');
+        $extension->addError('Error 2');
 
-        $this->assertTrue($extensionPoint->hasErrors());
-        $this->assertEquals(['Error 1', 'Error 2'], $extensionPoint->errors);
+        $this->assertTrue($extension->hasErrors());
+        $this->assertCount(2, $extension->errors);
+        $this->assertEquals(['Error 1', 'Error 2'], $extension->errors);
     }
 
-    public function test_has_no_errors_initially(): void
+    public function test_has_errors_returns_false_when_no_errors(): void
     {
-        $extensionPoint = new InterruptibleExtensionPoint();
+        $extension = new InterruptibleExtension;
 
-        $this->assertFalse($extensionPoint->hasErrors());
-        $this->assertEmpty($extensionPoint->errors);
+        $this->assertFalse($extension->hasErrors());
     }
 
-    public function test_preserves_readonly_data(): void
+    public function test_processed_count_starts_at_zero(): void
     {
-        $extensionPoint = new InterruptibleExtensionPoint(data: 'custom_data');
+        $extension = new InterruptibleExtension;
 
-        $this->assertEquals('custom_data', $extensionPoint->data);
+        $this->assertEquals(0, $extension->processedCount);
+    }
+
+    public function test_can_increment_processed_count(): void
+    {
+        $extension = new InterruptibleExtension;
+
+        $extension->incrementProcessed();
+        $extension->incrementProcessed();
+
+        $this->assertEquals(2, $extension->processedCount);
+    }
+
+    public function test_constructor_sets_readonly_properties(): void
+    {
+        $extension = new InterruptibleExtension(
+            orderId: 'order-123',
+            total: 250.50,
+        );
+
+        $this->assertEquals('order-123', $extension->orderId);
+        $this->assertEquals(250.50, $extension->total);
     }
 }

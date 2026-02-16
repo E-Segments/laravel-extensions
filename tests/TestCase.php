@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Esegments\LaravelExtensions\Tests;
 
 use Esegments\LaravelExtensions\ExtensionServiceProvider;
-use Orchestra\Testbench\TestCase as Orchestra;
+use Orchestra\Testbench\TestCase as BaseTestCase;
 
-abstract class TestCase extends Orchestra
+abstract class TestCase extends BaseTestCase
 {
     protected function getPackageProviders($app): array
     {
@@ -16,8 +16,15 @@ abstract class TestCase extends Orchestra
         ];
     }
 
+    protected function getPackageAliases($app): array
+    {
+        return [
+            'Extensions' => \Esegments\LaravelExtensions\Facades\Extensions::class,
+        ];
+    }
+
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('extensions.dispatch_as_events', true);
+        $app['config']->set('extensions.debug', false);
     }
 }

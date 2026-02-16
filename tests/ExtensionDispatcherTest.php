@@ -7,252 +7,307 @@ namespace Esegments\LaravelExtensions\Tests;
 use Esegments\LaravelExtensions\ExtensionDispatcher;
 use Esegments\LaravelExtensions\Facades\Extensions;
 use Esegments\LaravelExtensions\HandlerRegistry;
-use Esegments\LaravelExtensions\Tests\Fixtures\InterruptibleExtensionPoint;
-use Esegments\LaravelExtensions\Tests\Fixtures\PipeableExtensionPoint;
-use Esegments\LaravelExtensions\Tests\Fixtures\SimpleExtensionPoint;
+use Esegments\LaravelExtensions\Tests\Fixtures\CountingHandler;
+use Esegments\LaravelExtensions\Tests\Fixtures\InterruptibleExtension;
+use Esegments\LaravelExtensions\Tests\Fixtures\InterruptingHandler;
+use Esegments\LaravelExtensions\Tests\Fixtures\SimpleExtension;
 use Esegments\LaravelExtensions\Tests\Fixtures\SimpleHandler;
-use Esegments\LaravelExtensions\Tests\Fixtures\VetoHandler;
 use Illuminate\Support\Facades\Event;
 
 final class ExtensionDispatcherTest extends TestCase
 {
-    private ExtensionDispatcher $dispatcher;
-
     private HandlerRegistry $registry;
+
+    private ExtensionDispatcher $dispatcher;
 
     protected function setUp(): void
     {
         parent::setUp();
         $this->registry = $this->app->make(HandlerRegistry::class);
         $this->dispatcher = $this->app->make(ExtensionDispatcher::class);
-        $this->registry->clear();
     }
 
-    public function test_dispatches_to_registered_handlers(): void
+    public function test_can_dispatch_simple_extension(): void
     {
-        $this->registry->register(
-            SimpleExtensionPoint::class,
-            fn (SimpleExtensionPoint $ext) => $ext->processed[] = 'handler1',
-        );
+        $this->registry->register(SimpleExtension::class, SimpleHandler::class);
 
-        $extensionPoint = new SimpleExtensionPoint();
-        $result = $this->dispatcher->dispatch($extensionPoint);
+        $extension = new SimpleExtension('test');
+        $result = $this->dispatcher->dispatch($extension);
 
-        $this->assertSame($extensionPoint, $result);
-        $this->assertEquals(['handler1'], $extensionPoint->processed);
+        $this->assertSame($extension, $result);
+        $this->assertEquals('executed', $extension->data['simple_handler']);
     }
 
-    public function test_dispatches_handlers_in_priority_order(): void
+    public function test_can_dispatch_with_closure_handler(): void
     {
         $this->registry->register(
-            SimpleExtensionPoint::class,
-            fn (SimpleExtensionPoint $ext) => $ext->processed[] = 'low',
-            priority: 200,
+            SimpleExtension::class,
+            fn (SimpleExtension $ext) => $ext->addData('closure', 'executed'),
         );
+
+        $extension = new SimpleExtension('test');
+        $this->dispatcher->dispatch($extension);
+
+        $this->assertEquals('executed', $extension->data['closure']);
+    }
+
+    public function test_handlers_are_executed_in_priority_order(): void
+    {
+        $order = [];
+
         $this->registry->register(
-            SimpleExtensionPoint::class,
-            fn (SimpleExtensionPoint $ext) => $ext->processed[] = 'high',
-            priority: 10,
+            SimpleExtension::class,
+            function (SimpleExtension $ext) use (&$order) {
+                $order[] = 'third';
+            },
+            priority: 150,
         );
+
         $this->registry->register(
-            SimpleExtensionPoint::class,
-            fn (SimpleExtensionPoint $ext) => $ext->processed[] = 'normal',
+            SimpleExtension::class,
+            function (SimpleExtension $ext) use (&$order) {
+                $order[] = 'first';
+            },
+            priority: 50,
+        );
+
+        $this->registry->register(
+            SimpleExtension::class,
+            function (SimpleExtension $ext) use (&$order) {
+                $order[] = 'second';
+            },
             priority: 100,
         );
 
-        $extensionPoint = new SimpleExtensionPoint();
-        $this->dispatcher->dispatch($extensionPoint);
+        $this->dispatcher->dispatch(new SimpleExtension('test'));
 
-        $this->assertEquals(['high', 'normal', 'low'], $extensionPoint->processed);
+        $this->assertEquals(['first', 'second', 'third'], $order);
     }
 
-    public function test_resolves_handler_classes_from_container(): void
-    {
-        $this->app->bind(SimpleHandler::class, fn () => new SimpleHandler('Injected'));
-        $this->registry->register(SimpleExtensionPoint::class, SimpleHandler::class);
-
-        $extensionPoint = new SimpleExtensionPoint();
-        $this->dispatcher->dispatch($extensionPoint);
-
-        $this->assertEquals(['Injected'], $extensionPoint->processed);
-    }
-
-    public function test_interrupts_on_false_return_for_interruptible(): void
+    public function test_interruptible_extension_can_be_interrupted(): void
     {
         $this->registry->register(
-            InterruptibleExtensionPoint::class,
-            fn (InterruptibleExtensionPoint $ext) => $ext->processed[] = 'first',
+            InterruptibleExtension::class,
+            InterruptingHandler::class,
             priority: 10,
         );
-        $this->registry->register(
-            InterruptibleExtensionPoint::class,
-            function (InterruptibleExtensionPoint $ext) {
-                $ext->processed[] = 'veto';
 
-                return false; // Interrupt
-            },
-            priority: 20,
-        );
-        $this->registry->register(
-            InterruptibleExtensionPoint::class,
-            fn (InterruptibleExtensionPoint $ext) => $ext->processed[] = 'never_called',
-            priority: 30,
-        );
-
-        $extensionPoint = new InterruptibleExtensionPoint();
-        $this->dispatcher->dispatch($extensionPoint);
-
-        $this->assertTrue($extensionPoint->wasInterrupted());
-        $this->assertEquals(['first', 'veto'], $extensionPoint->processed);
-        $this->assertNotContains('never_called', $extensionPoint->processed);
-    }
-
-    public function test_dispatch_interruptible_returns_can_proceed(): void
-    {
-        // No handlers - should proceed
-        $extensionPoint = new InterruptibleExtensionPoint();
-        $canProceed = $this->dispatcher->dispatchInterruptible($extensionPoint);
-
-        $this->assertTrue($canProceed);
-        $this->assertFalse($extensionPoint->wasInterrupted());
-    }
-
-    public function test_dispatch_interruptible_returns_false_when_vetoed(): void
-    {
-        $this->registry->register(
-            InterruptibleExtensionPoint::class,
-            fn () => false,
-        );
-
-        $extensionPoint = new InterruptibleExtensionPoint();
-        $canProceed = $this->dispatcher->dispatchInterruptible($extensionPoint);
+        $extension = new InterruptibleExtension(total: 1000.00);
+        $canProceed = $this->dispatcher->dispatchInterruptible($extension);
 
         $this->assertFalse($canProceed);
-        $this->assertTrue($extensionPoint->wasInterrupted());
+        $this->assertTrue($extension->wasInterrupted());
+        $this->assertEquals(InterruptingHandler::class, $extension->getInterruptedBy());
+        $this->assertNotEmpty($extension->errors);
     }
 
-    public function test_sets_interrupted_by_handler_name(): void
-    {
-        $this->app->bind(VetoHandler::class, fn () => new VetoHandler(shouldVeto: true));
-        $this->registry->register(InterruptibleExtensionPoint::class, VetoHandler::class);
-
-        $extensionPoint = new InterruptibleExtensionPoint();
-        $this->dispatcher->dispatch($extensionPoint);
-
-        $this->assertTrue($extensionPoint->wasInterrupted());
-        $this->assertEquals(VetoHandler::class, $extensionPoint->getInterruptedBy());
-    }
-
-    public function test_pipeable_extension_point_data_transformed(): void
+    public function test_handlers_after_interruption_are_not_executed(): void
     {
         $this->registry->register(
-            PipeableExtensionPoint::class,
-            function (PipeableExtensionPoint $ext) {
-                $ext->price *= 0.9; // 10% discount
-                $ext->transformations[] = 'discount';
-            },
+            InterruptibleExtension::class,
+            InterruptingHandler::class,
             priority: 10,
         );
+
         $this->registry->register(
-            PipeableExtensionPoint::class,
-            function (PipeableExtensionPoint $ext) {
-                $ext->price *= 1.1; // 10% tax
-                $ext->transformations[] = 'tax';
-            },
+            InterruptibleExtension::class,
+            CountingHandler::class,
             priority: 20,
         );
 
-        $extensionPoint = new PipeableExtensionPoint(price: 100.0);
-        $this->dispatcher->dispatch($extensionPoint);
+        $extension = new InterruptibleExtension(total: 1000.00);
+        $this->dispatcher->dispatchInterruptible($extension);
 
-        $this->assertEqualsWithDelta(99.0, $extensionPoint->price, 0.0001); // 100 * 0.9 * 1.1
-        $this->assertEquals(['discount', 'tax'], $extensionPoint->transformations);
+        // Only the interrupting handler should have run
+        $this->assertEquals(1, $extension->processedCount);
     }
 
-    public function test_dispatches_as_laravel_event(): void
+    public function test_interruptible_extension_completes_when_not_interrupted(): void
+    {
+        $this->registry->register(
+            InterruptibleExtension::class,
+            CountingHandler::class,
+            priority: 10,
+        );
+
+        $this->registry->register(
+            InterruptibleExtension::class,
+            CountingHandler::class,
+            priority: 20,
+        );
+
+        $extension = new InterruptibleExtension(total: 100.00);
+        $canProceed = $this->dispatcher->dispatchInterruptible($extension);
+
+        $this->assertTrue($canProceed);
+        $this->assertFalse($extension->wasInterrupted());
+        $this->assertEquals(2, $extension->processedCount);
+    }
+
+    public function test_dispatch_with_results_collects_handler_results(): void
+    {
+        // Use class-based handlers to get unique keys in results
+        $this->registry->register(
+            SimpleExtension::class,
+            SimpleHandler::class,
+            priority: 10,
+        );
+
+        $this->registry->register(
+            SimpleExtension::class,
+            CountingHandler::class,
+            priority: 20,
+        );
+
+        $extension = new SimpleExtension('test');
+        $result = $this->dispatcher->dispatchWithResults($extension);
+
+        $this->assertInstanceOf(\Esegments\LaravelExtensions\Results\DispatchResult::class, $result);
+        $this->assertSame($extension, $result->extension());
+        $this->assertCount(2, $result->successful());
+        $this->assertTrue($result->successful()->contains(SimpleHandler::class));
+        $this->assertTrue($result->successful()->contains(CountingHandler::class));
+    }
+
+    public function test_has_handlers_returns_correct_value(): void
+    {
+        $this->assertFalse($this->dispatcher->hasHandlers(SimpleExtension::class));
+
+        $this->registry->register(SimpleExtension::class, SimpleHandler::class);
+
+        $this->assertTrue($this->dispatcher->hasHandlers(SimpleExtension::class));
+    }
+
+    public function test_facade_works(): void
+    {
+        $this->registry->register(SimpleExtension::class, SimpleHandler::class);
+
+        $extension = new SimpleExtension('test');
+        $result = Extensions::dispatch($extension);
+
+        $this->assertSame($extension, $result);
+        $this->assertEquals('executed', $extension->data['simple_handler']);
+    }
+
+    public function test_extension_is_dispatched_as_laravel_event(): void
     {
         Event::fake();
 
-        // Re-create dispatcher after Event::fake() so it uses the fake event dispatcher
+        // Rebuild dispatcher with the faked event dispatcher
         $dispatcher = new ExtensionDispatcher(
             container: $this->app,
             registry: $this->registry,
-            events: $this->app->make(\Illuminate\Contracts\Events\Dispatcher::class),
-            dispatchAsEvents: true,
+            events: $this->app->make('events'),
         );
 
-        $extensionPoint = new SimpleExtensionPoint();
-        $dispatcher->dispatch($extensionPoint);
+        $extension = new SimpleExtension('test');
+        $dispatcher->dispatch($extension);
 
-        Event::assertDispatched(SimpleExtensionPoint::class);
+        Event::assertDispatched(SimpleExtension::class);
     }
 
-    public function test_dispatch_silent_skips_laravel_events(): void
+    public function test_interruptible_extension_is_dispatched_as_laravel_event(): void
     {
         Event::fake();
 
-        $extensionPoint = new SimpleExtensionPoint();
-        $this->dispatcher->dispatchSilent($extensionPoint);
-
-        Event::assertNotDispatched(SimpleExtensionPoint::class);
-    }
-
-    public function test_has_handlers_delegates_to_registry(): void
-    {
-        $this->assertFalse($this->dispatcher->hasHandlers(SimpleExtensionPoint::class));
-
-        $this->registry->register(SimpleExtensionPoint::class, fn () => null);
-
-        $this->assertTrue($this->dispatcher->hasHandlers(SimpleExtensionPoint::class));
-    }
-
-    public function test_facade_dispatch_works(): void
-    {
-        Extensions::register(
-            SimpleExtensionPoint::class,
-            fn (SimpleExtensionPoint $ext) => $ext->processed[] = 'via_facade',
+        // Rebuild dispatcher with the faked event dispatcher
+        $dispatcher = new ExtensionDispatcher(
+            container: $this->app,
+            registry: $this->registry,
+            events: $this->app->make('events'),
         );
 
-        $extensionPoint = new SimpleExtensionPoint();
-        $result = Extensions::dispatch($extensionPoint);
+        $extension = new InterruptibleExtension;
+        $dispatcher->dispatchInterruptible($extension);
 
-        $this->assertSame($extensionPoint, $result);
-        $this->assertEquals(['via_facade'], $extensionPoint->processed);
+        Event::assertDispatched(InterruptibleExtension::class);
     }
 
-    public function test_facade_registry_access(): void
+    public function test_dispatch_with_no_handlers(): void
     {
-        Extensions::registry()->register(
-            SimpleExtensionPoint::class,
-            fn () => null,
-        );
+        $extension = new SimpleExtension('test');
+        $result = $this->dispatcher->dispatch($extension);
 
-        $this->assertTrue(Extensions::hasHandlers(SimpleExtensionPoint::class));
+        $this->assertSame($extension, $result);
+        $this->assertEmpty($extension->data);
     }
 
-    public function test_handles_no_registered_handlers_gracefully(): void
+    public function test_invokable_handler_class(): void
     {
-        $extensionPoint = new SimpleExtensionPoint();
-        $result = $this->dispatcher->dispatch($extensionPoint);
+        $this->app->bind('InvokableHandler', function () {
+            return new class
+            {
+                public function __invoke(SimpleExtension $ext): void
+                {
+                    $ext->addData('invokable', 'executed');
+                }
+            };
+        });
 
-        $this->assertSame($extensionPoint, $result);
-        $this->assertEmpty($extensionPoint->processed);
+        $this->registry->register(SimpleExtension::class, 'InvokableHandler');
+
+        $extension = new SimpleExtension('test');
+        $this->dispatcher->dispatch($extension);
+
+        $this->assertEquals('executed', $extension->data['invokable']);
     }
 
-    public function test_closure_handler_with_injected_dependencies(): void
+    public function test_dispatch_silent_does_not_fire_laravel_event(): void
     {
-        $this->app->singleton('test.value', fn () => 'injected');
+        Event::fake();
+
+        $this->registry->register(SimpleExtension::class, SimpleHandler::class);
+
+        $extension = new SimpleExtension('test');
+        $result = $this->dispatcher->dispatchSilent($extension);
+
+        $this->assertSame($extension, $result);
+        $this->assertEquals('executed', $extension->data['simple_handler']);
+        Event::assertNotDispatched(SimpleExtension::class);
+    }
+
+    public function test_dispatch_interruptible_silent_does_not_fire_laravel_event(): void
+    {
+        Event::fake();
+
+        $this->registry->register(InterruptibleExtension::class, CountingHandler::class);
+
+        $extension = new InterruptibleExtension;
+        $canProceed = $this->dispatcher->dispatchInterruptibleSilent($extension);
+
+        $this->assertTrue($canProceed);
+        $this->assertEquals(1, $extension->processedCount);
+        Event::assertNotDispatched(InterruptibleExtension::class);
+    }
+
+    public function test_dispatch_interruptible_silent_handles_interruption(): void
+    {
+        Event::fake();
 
         $this->registry->register(
-            SimpleExtensionPoint::class,
-            function (SimpleExtensionPoint $ext) {
-                $ext->processed[] = app('test.value');
-            },
+            InterruptibleExtension::class,
+            InterruptingHandler::class,
+            priority: 10,
         );
 
-        $extensionPoint = new SimpleExtensionPoint();
-        $this->dispatcher->dispatch($extensionPoint);
+        $extension = new InterruptibleExtension(total: 1000.00);
+        $canProceed = $this->dispatcher->dispatchInterruptibleSilent($extension);
 
-        $this->assertEquals(['injected'], $extensionPoint->processed);
+        $this->assertFalse($canProceed);
+        $this->assertTrue($extension->wasInterrupted());
+        Event::assertNotDispatched(InterruptibleExtension::class);
+    }
+
+    public function test_facade_dispatch_silent_works(): void
+    {
+        Event::fake();
+
+        $this->registry->register(SimpleExtension::class, SimpleHandler::class);
+
+        $extension = new SimpleExtension('test');
+        $result = Extensions::dispatchSilent($extension);
+
+        $this->assertSame($extension, $result);
+        Event::assertNotDispatched(SimpleExtension::class);
     }
 }

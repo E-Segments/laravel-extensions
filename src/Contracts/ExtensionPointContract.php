@@ -7,13 +7,9 @@ namespace Esegments\LaravelExtensions\Contracts;
 /**
  * Marker interface for extension points.
  *
- * Extension points are typed PHP classes that define specific points in your
- * application where handlers can be registered to modify behavior or data.
- *
- * Unlike WordPress-style string hooks, extension points provide:
- * - Full IDE auto-completion
- * - Type safety for handlers
- * - Explicit, predictable registration
+ * Extension points are type-safe PHP classes that define extensible moments
+ * in your application. Unlike WordPress-style string hooks, extension points
+ * provide full IDE support and type safety.
  *
  * @example
  * ```php
@@ -28,5 +24,5 @@ namespace Esegments\LaravelExtensions\Contracts;
  */
 interface ExtensionPointContract
 {
-    // Marker interface - extension points define their own properties and methods
+    // Marker interface - extension points define their own properties
 }

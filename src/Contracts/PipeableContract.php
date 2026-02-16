@@ -5,14 +5,11 @@ declare(strict_types=1);
 namespace Esegments\LaravelExtensions\Contracts;
 
 /**
- * Marker for extension points that allow data transformation.
+ * Marker interface for extension points that support data transformation.
  *
- * Pipeable extension points indicate that handlers may modify the
- * extension point's data. Each handler receives the extension point,
- * can modify its properties, and the next handler receives the
- * modified state.
- *
- * This is similar to Laravel's Pipeline, but type-safe and explicit.
+ * Pipeable extension points allow handlers to modify the extension point's
+ * data as it passes through the handler chain. This is similar to Laravel's
+ * Pipeline pattern.
  *
  * @example
  * ```php
@@ -24,10 +21,19 @@ namespace Esegments\LaravelExtensions\Contracts;
  *     ) {}
  * }
  *
- * // Handlers modify the price in sequence:
- * // Handler 1: Apply bulk discount -> $ext->price *= 0.9
- * // Handler 2: Apply tax -> $ext->price *= 1.1
- * // Handler 3: Round to cents -> $ext->price = round($ext->price, 2)
+ * // Handler 1: Apply discount
+ * public function handle(ExtensionPointContract $ext): mixed
+ * {
+ *     $ext->price *= 0.9; // 10% discount
+ *     return null;
+ * }
+ *
+ * // Handler 2: Apply tax
+ * public function handle(ExtensionPointContract $ext): mixed
+ * {
+ *     $ext->price *= 1.1; // 10% tax
+ *     return null;
+ * }
  * ```
  */
 interface PipeableContract extends ExtensionPointContract
