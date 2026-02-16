@@ -2,6 +2,11 @@
 
 A type-safe, production-ready extension points system for Laravel applications.
 
+[![PHP Version](https://img.shields.io/badge/php-%3E%3D8.2-8892BF.svg)](https://php.net/)
+[![Laravel](https://img.shields.io/badge/laravel-11.x%20%7C%2012.x-FF2D20.svg)](https://laravel.com)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Documentation](https://img.shields.io/badge/docs-e--segments.github.io-blue.svg)](https://e-segments.github.io/laravel-extensions/)
+
 ## Overview
 
 This package provides a powerful way to create extensible moments in your application using typed PHP classes instead of string-based hooks. It offers:
@@ -770,6 +775,12 @@ Handlers run in priority order (lower numbers first):
 cd packages/esegments/laravel-extensions
 ./vendor/bin/phpunit
 ```
+
+---
+
+## Documentation
+
+📖 **Full documentation available at: [e-segments.github.io/laravel-extensions](https://e-segments.github.io/laravel-extensions/)**
 
 ---
 
