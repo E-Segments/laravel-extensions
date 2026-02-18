@@ -3,10 +3,13 @@ remote_theme: E-Segments/minima-plus
 
 # Site basics
 title: "Laravel Extensions"
-description: "A powerful extension point system for Laravel applications"
+description: "Type-safe extension points system for Laravel applications"
 url: "https://e-segments.github.io"
 baseurl: "/laravel-extensions"
 author: "E-Segments"
+
+# GitHub repository (for changelog/releases)
+github_repo: "E-Segments/laravel-extensions"
 
 # Build settings
 markdown: kramdown
@@ -18,6 +21,28 @@ plugins:
   - jekyll-seo-tag
   - jekyll-sitemap
   - jekyll-remote-theme
+  - jekyll-paginate-v2
+
+# Pagination (jekyll-paginate-v2)
+pagination:
+  enabled: true
+  per_page: 6
+  permalink: '/page/:num/'
+  sort_field: 'date'
+  sort_reverse: true
+  trail:
+    before: 2
+    after: 2
+
+# Autopages
+autopages:
+  enabled: true
+  collections:
+    enabled: false
+  categories:
+    enabled: false
+  tags:
+    enabled: false
 
 # Kramdown settings
 kramdown:
@@ -71,7 +96,7 @@ theme_config:
 
   features:
     dark_mode: true
-    search: false
+    search: true
     comments: false
 
 # Exclude from build
@@ -80,3 +105,4 @@ exclude:
   - Gemfile.lock
   - node_modules
   - vendor
+  - README.md

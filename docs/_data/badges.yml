@@ -1,0 +1,40 @@
+# Package Badges
+theme:
+  - label: "PHP"
+    message: "8.2+"
+    color: "777BB4"
+    logo: "php"
+    logoColor: "white"
+    style: "for-the-badge"
+
+  - label: "Laravel"
+    message: "11.x | 12.x"
+    color: "FF2D20"
+    logo: "laravel"
+    logoColor: "white"
+    style: "for-the-badge"
+
+  - label: "License"
+    message: "MIT"
+    color: "green"
+    style: "for-the-badge"
+
+# GitHub badges
+github:
+  - type: "github/v/release"
+    repo: "E-Segments/laravel-extensions"
+    style: "for-the-badge"
+
+  - type: "github/stars"
+    repo: "E-Segments/laravel-extensions"
+    style: "for-the-badge"
+    logo: "github"
+
+# Build status badges
+build:
+  - type: "github/actions/workflow/status"
+    repo: "E-Segments/laravel-extensions"
+    label: "deploy.yml"
+    style: "for-the-badge"
+    logo: "githubactions"
+    logoColor: "white"

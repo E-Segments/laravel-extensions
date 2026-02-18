@@ -1,17 +1,28 @@
+# Main navigation links
 main:
-  - title: "Documentation"
-    url: "/laravel-extensions/docs/getting-started/"
-  - title: "GitHub"
-    url: "https://github.com/E-Segments/laravel-extensions"
+  - title: "Home"
+    url: "/"
+  - title: "Docs"
+    url: "/docs/getting-started/"
+  - title: "CLI"
+    url: "/cli/"
+  - title: "Changelog"
+    url: "/changelog/"
 
+# Documentation sidebar
 docs:
   - title: "Getting Started"
-    url: "/laravel-extensions/docs/getting-started/"
+    url: "/docs/getting-started/"
   - title: "Safety Features"
-    url: "/laravel-extensions/docs/safety/"
+    url: "/docs/safety/"
   - title: "Pipelines"
-    url: "/laravel-extensions/docs/pipelines/"
+    url: "/docs/pipelines/"
   - title: "Async Processing"
-    url: "/laravel-extensions/docs/async/"
+    url: "/docs/async/"
   - title: "Configuration"
-    url: "/laravel-extensions/docs/configuration/"
+    url: "/docs/configuration/"
+
+# Call to action button in header
+cta:
+  title: "Get Started"
+  url: "/docs/getting-started/"
