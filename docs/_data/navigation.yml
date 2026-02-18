@@ -11,16 +11,67 @@ main:
 
 # Documentation sidebar
 docs:
-  - title: "Getting Started"
-    url: "/docs/getting-started/"
+  - title: "Introduction"
+    items:
+      - title: "Getting Started"
+        url: "/docs/getting-started/"
+      - title: "Core Concepts"
+        url: "/docs/concepts/"
+      - title: "Configuration"
+        url: "/docs/configuration/"
+
+  - title: "Extension Points"
+    items:
+      - title: "Creating Extension Points"
+        url: "/docs/extension-points/"
+      - title: "Dispatching"
+        url: "/docs/dispatching/"
+      - title: "Interruptible Extensions"
+        url: "/docs/interruptible/"
+
+  - title: "Handlers"
+    items:
+      - title: "Registering Handlers"
+        url: "/docs/handlers/"
+      - title: "Priorities & Tags"
+        url: "/docs/priorities-tags/"
+      - title: "Attribute Discovery"
+        url: "/docs/attributes/"
+      - title: "Conditional Registration"
+        url: "/docs/conditional/"
+      - title: "Scoped Handlers"
+        url: "/docs/scoped/"
+
   - title: "Safety Features"
-    url: "/docs/safety/"
-  - title: "Pipelines"
-    url: "/docs/pipelines/"
-  - title: "Async Processing"
-    url: "/docs/async/"
-  - title: "Configuration"
-    url: "/docs/configuration/"
+    items:
+      - title: "Graceful Mode"
+        url: "/docs/graceful-mode/"
+      - title: "Muting & Silencing"
+        url: "/docs/muting-silencing/"
+      - title: "Circuit Breaker"
+        url: "/docs/circuit-breaker/"
+
+  - title: "Advanced Patterns"
+    items:
+      - title: "Strategies"
+        url: "/docs/strategies/"
+      - title: "Pipeline System"
+        url: "/docs/pipelines/"
+      - title: "Async Processing"
+        url: "/docs/async/"
+      - title: "Profiling"
+        url: "/docs/profiling/"
+
+  - title: "Integrations"
+    items:
+      - title: "Eloquent Bridge"
+        url: "/docs/eloquent-bridge/"
+      - title: "Livewire Bridge"
+        url: "/docs/livewire-bridge/"
+      - title: "Filament Bridge"
+        url: "/docs/filament-bridge/"
+      - title: "Debugbar & Pulse"
+        url: "/docs/integrations/"
 
 # Call to action button in header
 cta:
