@@ -1,195 +1,148 @@
 ---
-title: "Getting Started"
-description: "Learn how to install and use Laravel Extensions"
-order: 1
+layout: docs
+title: Getting Started
+description: Install and configure Laravel Extensions
 ---
 
-## Requirements
-
-- PHP 8.2+
-- Laravel 11+
-
 ## Installation
-
-Install via Composer:
 
 ```bash
 composer require esegments/laravel-extensions
 ```
 
-Publish the configuration:
+## Publish Configuration
 
 ```bash
-php artisan vendor:publish --provider="Esegments\LaravelExtensions\ExtensionServiceProvider"
+php artisan vendor:publish --tag=extensions-config
 ```
 
-This creates `config/extensions.php`.
+## Core Concepts
 
-## Basic Usage
+Laravel Extensions provides a **type-safe extension point system** for Laravel applications. Unlike WordPress-style string hooks, extension points are defined as classes, giving you:
 
-### Defining Extension Points
+- Full IDE autocompletion
+- Type safety
+- Refactoring support
+- Clear contracts
 
-Extension points are hooks in your code where plugins can add functionality:
+## Quick Example
+
+### 1. Define an Extension Point
 
 ```php
-use Esegments\LaravelExtensions\Facades\Extensions;
+namespace App\Extensions;
 
-class UserService
+use Esegments\LaravelExtensions\Contracts\ExtensionPointContract;
+
+class UserCreated implements ExtensionPointContract
 {
-    public function register(array $data)
+    public function __construct(
+        public readonly User $user
+    ) {}
+}
+```
+
+### 2. Create a Handler
+
+```php
+namespace App\Handlers;
+
+use Esegments\LaravelExtensions\Contracts\ExtensionHandlerContract;
+
+class SendWelcomeEmail implements ExtensionHandlerContract
+{
+    public function handle(ExtensionPointContract $extension): void
     {
-        $user = User::create($data);
-
-        // Dispatch extension point
-        Extensions::dispatch('user.registered', $user);
-
-        return $user;
+        Mail::to($extension->user->email)
+            ->send(new WelcomeEmail($extension->user));
     }
 }
 ```
 
-### Registering Handlers
+### 3. Register the Handler
 
-Register handlers in a service provider:
+```php
+// In a service provider
+use Esegments\LaravelExtensions\Facades\Extensions;
+
+Extensions::register(
+    UserCreated::class,
+    SendWelcomeEmail::class
+);
+```
+
+### 4. Dispatch the Extension Point
 
 ```php
 use Esegments\LaravelExtensions\Facades\Extensions;
+use App\Extensions\UserCreated;
 
-class AppServiceProvider extends ServiceProvider
-{
-    public function boot()
-    {
-        Extensions::register('user.registered', function ($user) {
-            Mail::to($user)->send(new WelcomeEmail($user));
-        });
+// In your controller or service
+$user = User::create($data);
 
-        // With priority (higher = runs first)
-        Extensions::register('user.registered', CreateUserProfile::class, 20);
-    }
-}
+Extensions::dispatch(new UserCreated($user));
 ```
 
-### Using Attributes
+## Multiple Handlers
 
-PHP 8 attributes provide a cleaner way to register handlers:
+Extension points can have multiple handlers:
+
+```php
+// Register multiple handlers for the same extension point
+Extensions::register(UserCreated::class, SendWelcomeEmail::class, priority: 10);
+Extensions::register(UserCreated::class, CreateUserProfile::class, priority: 20);
+Extensions::register(UserCreated::class, NotifyAdmins::class, priority: 30);
+Extensions::register(UserCreated::class, TrackAnalytics::class, priority: 100);
+```
+
+Handlers execute in priority order (lower numbers first).
+
+## Using Attributes
+
+Alternatively, use PHP attributes:
 
 ```php
 use Esegments\LaravelExtensions\Attributes\ExtensionHandler;
 
-#[ExtensionHandler('user.registered', priority: 10)]
-class SendWelcomeEmail
+#[ExtensionHandler(UserCreated::class, priority: 10)]
+class SendWelcomeEmail implements ExtensionHandlerContract
 {
-    public function __invoke($user)
+    public function handle(ExtensionPointContract $extension): void
     {
-        Mail::to($user)->send(new WelcomeEmail($user));
+        // ...
     }
 }
 ```
 
-Enable attribute discovery in `config/extensions.php`:
+Enable attribute discovery:
 
 ```php
+// config/extensions.php
 'discovery' => [
     'enabled' => true,
-    'paths' => [
-        app_path('Extensions'),
-    ],
+    'directories' => ['app/Handlers'],
 ],
 ```
 
-## Working with Results
-
-### Getting Results
+## Basic Configuration
 
 ```php
-$results = Extensions::dispatch('order.calculating', $order);
-
-// Get all results as array
-$allResults = $results->all();
-
-// Check if any handler succeeded
-if ($results->hasSuccess()) {
-    // ...
-}
-
-// Get first successful result
-$first = $results->first();
-```
-
-### Result Strategies
-
-Use different strategies to combine handler results:
-
-```php
-// First non-null result
-$result = Extensions::dispatch('get.price', $product)
-    ->useStrategy(new FirstResultStrategy())
-    ->value();
-
-// Merge all arrays
-$combined = Extensions::dispatch('collect.data', $context)
-    ->useStrategy(new MergeResultsStrategy())
-    ->value();
-
-// Reduce with callback
-$total = Extensions::dispatch('calculate.fees', $order)
-    ->useStrategy(new ReduceResultsStrategy(
-        fn($carry, $item) => $carry + $item,
-        0
-    ))
-    ->value();
-```
-
-## Conditional Handlers
-
-### Environment-Based
-
-```php
-use Esegments\LaravelExtensions\Attributes\When;
-
-#[ExtensionHandler('debug.log')]
-#[When(env: 'local')]
-class LocalDebugHandler
-{
-    public function __invoke($data)
-    {
-        Log::debug('Debug data', $data);
-    }
-}
-```
-
-### Feature Flag-Based
-
-```php
-use Esegments\LaravelExtensions\Attributes\WhenFeature;
-
-#[ExtensionHandler('checkout.complete')]
-#[WhenFeature('new-checkout')]
-class NewCheckoutHandler
-{
-    // Only runs when 'new-checkout' feature is enabled
-}
-```
-
-## Interruptible Flow
-
-Handlers can stop further processing:
-
-```php
-Extensions::register('order.validate', function ($order) {
-    if ($order->total > 10000) {
-        // Stop processing, return error
-        return Extensions::interrupt([
-            'error' => 'Order exceeds limit',
-            'max' => 10000,
-        ]);
-    }
-});
+// config/extensions.php
+return [
+    'debug' => env('EXTENSIONS_DEBUG', false),
+    'graceful_mode' => env('EXTENSIONS_GRACEFUL', false),
+    
+    'circuit_breaker' => [
+        'enabled' => true,
+        'threshold' => 5,
+        'timeout' => 60,
+    ],
+];
 ```
 
 ## Next Steps
 
-- [Safety Features](/docs/safety/) - Circuit breakers and error handling
-- [Pipelines](/docs/pipelines/) - Chain handlers together
-- [Async Processing](/docs/async/) - Queue handlers for background work
-- [Configuration](/docs/configuration/) - All options explained
+- [Core Concepts](/docs/concepts/) - Understand the architecture
+- [Extension Points](/docs/extension-points/) - Creating extension points
+- [Handlers](/docs/handlers/) - Registering and managing handlers
+- [Safety Features](/docs/graceful-mode/) - Error handling and resilience

@@ -1,51 +1,95 @@
 ---
-title: "Configuration"
-description: "All configuration options explained"
-order: 5
+layout: docs
+title: Configuration
+description: Complete configuration reference
 ---
 
-After publishing the configuration file, you'll find it at `config/extensions.php`.
+## Publishing Config
 
-## Full Configuration Reference
+```bash
+php artisan vendor:publish --tag=extensions-config
+```
+
+## Full Configuration
 
 ```php
-<?php
+// config/extensions.php
 
 return [
     /*
     |--------------------------------------------------------------------------
-    | Handler Discovery
+    | Debug Mode
     |--------------------------------------------------------------------------
     |
-    | Configure automatic discovery of extension handlers using PHP attributes.
+    | Enable verbose logging for troubleshooting.
     |
     */
-    'discovery' => [
-        'enabled' => true,
-        'paths' => [
-            app_path('Extensions'),
-            app_path('Handlers'),
-        ],
-        'cache' => [
-            'enabled' => env('EXTENSIONS_CACHE_DISCOVERY', true),
-            'key' => 'extensions.discovered_handlers',
-            'ttl' => 3600,
-        ],
-    ],
+    'debug' => env('EXTENSIONS_DEBUG', false),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Log Channel
+    |--------------------------------------------------------------------------
+    |
+    | The log channel for extension-related messages.
+    |
+    */
+    'log_channel' => env('EXTENSIONS_LOG_CHANNEL', null),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Graceful Mode
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, handler exceptions are caught and collected
+    | instead of being thrown.
+    |
+    */
+    'graceful_mode' => env('EXTENSIONS_GRACEFUL', false),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Strict Mode
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, throws exception if no handlers are registered
+    | for a dispatched extension point.
+    |
+    */
+    'strict_mode' => env('EXTENSIONS_STRICT', false),
 
     /*
     |--------------------------------------------------------------------------
     | Circuit Breaker
     |--------------------------------------------------------------------------
     |
-    | Configure the circuit breaker for fault tolerance.
+    | Automatically disable failing handlers to prevent cascading failures.
     |
     */
     'circuit_breaker' => [
-        'enabled' => true,
+        'enabled' => env('EXTENSIONS_CIRCUIT_BREAKER', true),
         'threshold' => 5,        // Failures before opening
-        'timeout' => 60,         // Seconds before trying again
-        'store' => 'cache',      // 'cache' or 'array'
+        'timeout' => 60,         // Seconds before testing recovery
+        'half_open_max' => 3,    // Successes needed to close
+        'store' => 'cache',      // State storage driver
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Attribute Discovery
+    |--------------------------------------------------------------------------
+    |
+    | Auto-discover handlers using PHP attributes.
+    |
+    */
+    'discovery' => [
+        'enabled' => env('EXTENSIONS_DISCOVERY', false),
+        'directories' => [
+            'app/Handlers',
+            'app/Extensions/Handlers',
+        ],
+        'cache' => env('EXTENSIONS_DISCOVERY_CACHE', true),
+        'cache_key' => 'extensions.discovered_handlers',
     ],
 
     /*
@@ -53,14 +97,14 @@ return [
     | Async Processing
     |--------------------------------------------------------------------------
     |
-    | Configure default settings for async handler execution.
+    | Default settings for async handlers.
     |
     */
     'async' => [
-        'default_queue' => 'extensions',
-        'default_connection' => null,
-        'retry_after' => 90,
-        'max_tries' => 3,
+        'default_queue' => env('EXTENSIONS_ASYNC_QUEUE', 'default'),
+        'tries' => 3,
+        'backoff' => 10,
+        'backoff_strategy' => 'exponential', // 'linear', 'exponential', 'fixed'
     ],
 
     /*
@@ -68,69 +112,51 @@ return [
     | Profiling
     |--------------------------------------------------------------------------
     |
-    | Enable profiling to monitor handler execution times.
+    | Track handler execution performance.
     |
     */
     'profiling' => [
         'enabled' => env('EXTENSIONS_PROFILING', false),
-        'slow_threshold' => 100,  // ms - log handlers slower than this
-        'store' => 'array',       // 'array', 'cache', or 'database'
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Strict Mode
-    |--------------------------------------------------------------------------
-    |
-    | When enabled, throws exceptions for unregistered extension points.
-    |
-    */
-    'strict_mode' => env('EXTENSIONS_STRICT_MODE', false),
-
-    /*
-    |--------------------------------------------------------------------------
-    | Logging
-    |--------------------------------------------------------------------------
-    |
-    | Configure logging for extension dispatches.
-    |
-    */
-    'logging' => [
-        'enabled' => env('EXTENSIONS_LOGGING', false),
-        'channel' => 'extensions',
-        'level' => 'debug',
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Signature Validation
-    |--------------------------------------------------------------------------
-    |
-    | Validate handler signatures match expected parameters.
-    |
-    */
-    'signature_validation' => [
-        'enabled' => env('EXTENSIONS_VALIDATE_SIGNATURES', true),
-        'strict' => false,  // Throw on mismatch vs just log
+        'slow_threshold' => 100, // milliseconds
+        'log_channel' => 'extensions',
     ],
 
     /*
     |--------------------------------------------------------------------------
     | Integrations
     |--------------------------------------------------------------------------
-    |
-    | Configure integrations with other packages.
-    |
     */
     'integrations' => [
-        'debugbar' => [
-            'enabled' => true,
-            'collector' => true,
-        ],
-        'pulse' => [
-            'enabled' => true,
-            'sample_rate' => 1.0,
-        ],
+        'debugbar' => env('EXTENSIONS_DEBUGBAR', true),
+        'pulse' => env('EXTENSIONS_PULSE', true),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Framework Bridges
+    |--------------------------------------------------------------------------
+    |
+    | Auto-dispatch extension points on framework events.
+    |
+    */
+    'bridges' => [
+        'eloquent' => env('EXTENSIONS_ELOQUENT_BRIDGE', false),
+        'livewire' => env('EXTENSIONS_LIVEWIRE_BRIDGE', false),
+        'filament' => env('EXTENSIONS_FILAMENT_BRIDGE', false),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Handler Cache
+    |--------------------------------------------------------------------------
+    |
+    | Cache registered handlers for performance.
+    |
+    */
+    'cache' => [
+        'enabled' => env('EXTENSIONS_CACHE', false),
+        'key' => 'extensions:handlers',
+        'ttl' => 86400, // 24 hours
     ],
 ];
 ```
@@ -139,144 +165,48 @@ return [
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `EXTENSIONS_CACHE_DISCOVERY` | `true` | Cache discovered handlers |
-| `EXTENSIONS_PROFILING` | `false` | Enable execution profiling |
-| `EXTENSIONS_STRICT_MODE` | `false` | Throw on unregistered points |
-| `EXTENSIONS_LOGGING` | `false` | Log all dispatches |
-| `EXTENSIONS_VALIDATE_SIGNATURES` | `true` | Validate handler signatures |
+| `EXTENSIONS_DEBUG` | `false` | Enable debug logging |
+| `EXTENSIONS_LOG_CHANNEL` | `null` | Log channel |
+| `EXTENSIONS_GRACEFUL` | `false` | Catch handler errors |
+| `EXTENSIONS_STRICT` | `false` | Error on no handlers |
+| `EXTENSIONS_CIRCUIT_BREAKER` | `true` | Enable circuit breaker |
+| `EXTENSIONS_DISCOVERY` | `false` | Enable attribute discovery |
+| `EXTENSIONS_DISCOVERY_CACHE` | `true` | Cache discovered handlers |
+| `EXTENSIONS_ASYNC_QUEUE` | `default` | Default async queue |
+| `EXTENSIONS_PROFILING` | `false` | Enable profiling |
+| `EXTENSIONS_DEBUGBAR` | `true` | Debugbar integration |
+| `EXTENSIONS_PULSE` | `true` | Pulse integration |
+| `EXTENSIONS_CACHE` | `false` | Cache handlers |
 
-## Discovery Paths
+## Production Configuration
 
-Add paths where handlers should be discovered:
+Recommended settings for production:
 
-```php
-'discovery' => [
-    'paths' => [
-        app_path('Extensions'),
-        app_path('Handlers'),
-        base_path('modules/*/Handlers'),  // Glob patterns supported
-    ],
-],
+```env
+EXTENSIONS_DEBUG=false
+EXTENSIONS_GRACEFUL=true
+EXTENSIONS_CIRCUIT_BREAKER=true
+EXTENSIONS_DISCOVERY=true
+EXTENSIONS_DISCOVERY_CACHE=true
+EXTENSIONS_CACHE=true
+EXTENSIONS_PROFILING=false
 ```
 
-## Circuit Breaker Stores
-
-### Cache Store (Default)
-
-Uses Laravel's cache for circuit state. Shared across processes:
-
-```php
-'circuit_breaker' => [
-    'store' => 'cache',
-],
-```
-
-### Array Store
-
-In-memory only. Useful for testing:
-
-```php
-'circuit_breaker' => [
-    'store' => 'array',
-],
-```
-
-## Profiling Storage
-
-### Array Store (Default)
-
-In-memory, cleared each request:
-
-```php
-'profiling' => [
-    'store' => 'array',
-],
-```
-
-### Cache Store
-
-Persisted across requests:
-
-```php
-'profiling' => [
-    'store' => 'cache',
-],
-```
-
-## Custom Logging Channel
-
-Add a custom channel in `config/logging.php`:
-
-```php
-'channels' => [
-    'extensions' => [
-        'driver' => 'daily',
-        'path' => storage_path('logs/extensions.log'),
-        'level' => 'debug',
-        'days' => 14,
-    ],
-],
-```
-
-## Runtime Configuration
-
-Override configuration at runtime:
-
-```php
-use Esegments\LaravelExtensions\Facades\Extensions;
-
-// Temporarily enable profiling
-Extensions::enableProfiling();
-
-Extensions::dispatch('heavy.operation', $data);
-
-$profile = Extensions::getProfile('heavy.operation');
-
-Extensions::disableProfiling();
-```
-
-### Circuit Breaker Runtime Control
-
-```php
-use Esegments\LaravelExtensions\CircuitBreaker\CircuitBreaker;
-
-// Manually open a circuit
-$breaker = new CircuitBreaker('failing-service');
-$breaker->open();
-
-// Reset a circuit
-$breaker->reset();
-```
-
-## Testing Configuration
-
-In your test setup:
-
-```php
-// tests/TestCase.php
-protected function setUp(): void
-{
-    parent::setUp();
-
-    // Disable discovery caching
-    config(['extensions.discovery.cache.enabled' => false]);
-
-    // Use array store for circuit breaker
-    config(['extensions.circuit_breaker.store' => 'array']);
-
-    // Enable strict mode to catch missing handlers
-    config(['extensions.strict_mode' => true]);
-}
-```
-
-## Publishing Configuration
+Cache handlers and discovery:
 
 ```bash
-php artisan vendor:publish --provider="Esegments\LaravelExtensions\ExtensionServiceProvider"
+php artisan extension:cache
 ```
 
-Or publish only config:
+## Development Configuration
 
-```bash
-php artisan vendor:publish --tag=extensions-config
+Recommended settings for development:
+
+```env
+EXTENSIONS_DEBUG=true
+EXTENSIONS_GRACEFUL=false
+EXTENSIONS_CIRCUIT_BREAKER=false
+EXTENSIONS_DISCOVERY=true
+EXTENSIONS_DISCOVERY_CACHE=false
+EXTENSIONS_PROFILING=true
 ```

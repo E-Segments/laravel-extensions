@@ -1,326 +1,244 @@
 ---
-title: "Async Processing"
-description: "Queue handlers for background execution"
-order: 4
+layout: docs
+title: Async Processing
+description: Execute handlers asynchronously via queues
 ---
 
-Laravel Extensions supports asynchronous handler execution using Laravel's queue system.
+## Overview
 
-## Marking Handlers as Async
+Handlers can be executed asynchronously using Laravel's queue system. This is useful for time-consuming operations that don't need to complete before returning a response.
 
-Use the `#[Async]` attribute:
+## Using the Async Attribute
 
 ```php
 use Esegments\LaravelExtensions\Attributes\Async;
 use Esegments\LaravelExtensions\Attributes\ExtensionHandler;
+use Esegments\LaravelExtensions\Contracts\AsyncHandlerContract;
 
-#[ExtensionHandler('order.placed')]
-#[Async]
-class SendOrderConfirmationEmail
+#[ExtensionHandler(OrderPlaced::class)]
+#[Async(
+    queue: 'notifications',
+    delay: 0,
+    retries: 3
+)]
+class SendOrderNotification implements AsyncHandlerContract
 {
-    public function __invoke($order)
+    public function handle(ExtensionPointContract $extension): void
     {
-        Mail::to($order->customer)->send(new OrderConfirmation($order));
+        // This runs in the background
+        $extension->order->customer->notify(
+            new OrderConfirmationNotification($extension->order)
+        );
     }
 }
 ```
 
-### Specifying Queue Options
+## Async Attribute Options
 
 ```php
-#[ExtensionHandler('order.placed')]
-#[Async(queue: 'emails', delay: 60)]
-class SendOrderConfirmationEmail
-{
-    // Runs on 'emails' queue after 60 second delay
-}
+#[Async(
+    queue: 'high-priority',      // Queue name
+    delay: 60,                    // Delay in seconds
+    retries: 3,                   // Max attempts
+    backoff: 'exponential',       // Backoff strategy
+    backoffSeconds: 10,           // Initial backoff
+    timeout: 120,                 // Job timeout in seconds
+    onFailure: NotifyAdmin::class,// Failure callback
+    onRetry: LogRetry::class,     // Retry callback
+    uniqueJob: false,             // Prevent duplicates
+    uniqueLockTimeout: 3600,      // Unique lock duration
+)]
 ```
 
-## Dispatching Async Handlers
+## Configuration
 
-When you dispatch an extension point, async handlers are automatically queued:
-
-```php
-// Sync handlers run immediately
-// Async handlers are queued
-Extensions::dispatch('order.placed', $order);
-```
-
-### Force Sync Execution
-
-Override async for testing or debugging:
-
-```php
-Extensions::dispatch('order.placed', $order)
-    ->sync();  // All handlers run synchronously
-```
-
-### Force Async Execution
-
-Queue all handlers regardless of attributes:
-
-```php
-Extensions::dispatch('order.placed', $order)
-    ->async();  // All handlers are queued
-```
-
-## Batch Processing
-
-Process multiple extension dispatches as a batch:
-
-```php
-use Esegments\LaravelExtensions\Jobs\BatchDispatchJob;
-use Illuminate\Support\Facades\Bus;
-
-$orders = Order::pending()->get();
-
-$jobs = $orders->map(fn($order) => new BatchDispatchJob(
-    'order.process',
-    $order
-));
-
-Bus::batch($jobs)
-    ->name('Process pending orders')
-    ->allowFailures()
-    ->dispatch();
-```
-
-### Batch Callbacks
-
-```php
-Bus::batch($jobs)
-    ->then(function ($batch) {
-        Log::info("Batch {$batch->id} completed successfully");
-    })
-    ->catch(function ($batch, $e) {
-        Log::error("Batch {$batch->id} failed", ['error' => $e->getMessage()]);
-    })
-    ->finally(function ($batch) {
-        // Cleanup
-    })
-    ->dispatch();
-```
-
-## Queue Configuration
-
-Configure default queue settings in `config/extensions.php`:
+Default async settings in `config/extensions.php`:
 
 ```php
 'async' => [
-    'default_queue' => 'extensions',
-    'default_connection' => null,  // Uses default connection
-    'retry_after' => 90,
-    'max_tries' => 3,
+    'default_queue' => 'default',
+    'tries' => 3,
+    'backoff' => 10,
+    'backoff_strategy' => 'exponential',
 ],
 ```
 
-## Job Middleware
+## Backoff Strategies
 
-Apply middleware to async handlers:
+### Linear
+
+Wait increases by fixed amount: 10s, 20s, 30s...
 
 ```php
-#[ExtensionHandler('heavy.process')]
-#[Async]
-class HeavyProcessHandler implements ShouldQueue
-{
-    public function middleware(): array
-    {
-        return [
-            new RateLimited('heavy-processing'),
-            new WithoutOverlapping($this->data['id']),
-        ];
-    }
+#[Async(backoff: 'linear', backoffSeconds: 10)]
+```
 
-    public function __invoke($data)
+### Exponential
+
+Wait doubles each time: 10s, 20s, 40s, 80s...
+
+```php
+#[Async(backoff: 'exponential', backoffSeconds: 10)]
+```
+
+### Fixed
+
+Same wait each time: 10s, 10s, 10s...
+
+```php
+#[Async(backoff: 'fixed', backoffSeconds: 10)]
+```
+
+### Custom Array
+
+Specific delays for each retry:
+
+```php
+#[Async(backoffSeconds: [10, 30, 60, 300])]
+```
+
+## Failure Handling
+
+### onFailure Callback
+
+```php
+#[Async(onFailure: NotifyOnFailure::class)]
+class SendEmailHandler implements AsyncHandlerContract
+{
+    // ...
+}
+
+class NotifyOnFailure
+{
+    public function __invoke(Throwable $exception, ExtensionPointContract $extension): void
     {
-        // Process heavy task
+        Log::error('Email handler failed', [
+            'exception' => $exception->getMessage(),
+            'extension' => get_class($extension),
+        ]);
+        
+        // Notify operations team
+        Slack::send("Handler failed: " . $exception->getMessage());
     }
 }
 ```
 
-## Handling Failures
-
-### Retry Configuration
+### onRetry Callback
 
 ```php
-#[ExtensionHandler('external.api.call')]
-#[Async(tries: 5, backoff: [10, 30, 60])]
-class CallExternalApiHandler
+#[Async(onRetry: LogRetryAttempt::class)]
+class ProcessPaymentHandler implements AsyncHandlerContract
 {
-    public function __invoke($data)
-    {
-        // Retries: immediately, 10s, 30s, 60s, 60s
-    }
+    // ...
+}
 
-    public function failed(\Throwable $exception): void
+class LogRetryAttempt
+{
+    public function __invoke(int $attempt, Throwable $exception): void
     {
-        Log::error('External API call failed permanently', [
-            'data' => $this->data,
+        Log::warning("Retry attempt {$attempt}", [
             'error' => $exception->getMessage(),
         ]);
     }
 }
 ```
 
-### Manual Retry
-
-```php
-// In your handler
-public function __invoke($data)
-{
-    try {
-        $this->processData($data);
-    } catch (TemporaryException $e) {
-        // Release back to queue with delay
-        $this->release(30);
-    }
-}
-```
-
 ## Unique Jobs
 
-Prevent duplicate job execution:
+Prevent duplicate jobs for the same extension:
 
 ```php
-#[ExtensionHandler('order.sync')]
-#[Async]
-class SyncOrderHandler implements ShouldBeUnique
+#[Async(
+    uniqueJob: true,
+    uniqueLockTimeout: 3600  // Lock for 1 hour
+)]
+class ImportProductsHandler implements AsyncHandlerContract
 {
-    public function uniqueId(): string
-    {
-        return $this->data['order_id'];
-    }
-
-    public function uniqueFor(): int
-    {
-        return 60; // Lock for 60 seconds
-    }
+    // Only one import job per product catalog at a time
 }
 ```
 
-## Chained Async Handlers
+## Programmatic Async
 
-Chain async operations:
+Register async handlers programmatically:
 
 ```php
-Extensions::dispatch('order.placed', $order)
-    ->chain([
-        fn() => Extensions::dispatch('order.notify.customer', $order),
-        fn() => Extensions::dispatch('order.notify.admin', $order),
-        fn() => Extensions::dispatch('order.analytics', $order),
-    ]);
+Extensions::registerAsync(
+    OrderPlaced::class,
+    SendEmailHandler::class,
+    queue: 'emails',
+    delay: 30,
+    retries: 5
+);
 ```
 
-## Monitoring Async Handlers
+## Mixing Sync and Async
 
-### Using Laravel Horizon
-
-If using Horizon, async handlers appear as regular jobs:
+You can have both sync and async handlers:
 
 ```php
-// View in Horizon dashboard
-// Job name: Esegments\LaravelExtensions\Jobs\AsyncHandlerJob
+// Sync - runs immediately
+Extensions::register(OrderPlaced::class, UpdateInventory::class, priority: 10);
+Extensions::register(OrderPlaced::class, ProcessPayment::class, priority: 20);
+
+// Async - queued for background
+Extensions::registerAsync(OrderPlaced::class, SendConfirmation::class);
+Extensions::registerAsync(OrderPlaced::class, GenerateInvoice::class);
 ```
 
-### Custom Tagging
+Sync handlers execute first, then async handlers are queued.
 
-```php
-#[ExtensionHandler('order.process')]
-#[Async]
-class ProcessOrderHandler implements ShouldQueue
-{
-    public function tags(): array
-    {
-        return [
-            'extension:order.process',
-            'order:' . $this->data['id'],
-        ];
-    }
-}
+## Monitoring Async Jobs
+
+Use Laravel Horizon or similar tools to monitor:
+
+```bash
+php artisan horizon
 ```
 
-## Testing Async Handlers
+Or check queue status:
 
-### Fake the Queue
-
-```php
-use Illuminate\Support\Facades\Queue;
-
-public function test_order_placed_queues_email()
-{
-    Queue::fake();
-
-    Extensions::dispatch('order.placed', $order);
-
-    Queue::assertPushed(AsyncHandlerJob::class, function ($job) {
-        return $job->handler === SendOrderConfirmationEmail::class;
-    });
-}
-```
-
-### Run Queued Jobs Synchronously
-
-```php
-public function test_full_order_flow()
-{
-    // All async handlers run synchronously in tests
-    Extensions::dispatch('order.placed', $order)->sync();
-
-    // Assert email was sent
-    Mail::assertSent(OrderConfirmation::class);
-}
+```bash
+php artisan queue:work --queue=notifications
 ```
 
 ## Best Practices
 
-### 1. Idempotent Handlers
+### 1. Serialize Extension Points Carefully
 
-Async handlers may run multiple times. Make them idempotent:
+Extension points are serialized for the queue. Ensure models use `SerializesModels`:
 
 ```php
-#[Async]
-class ProcessPaymentHandler
+class OrderPlaced implements ExtensionPointContract
 {
-    public function __invoke($order)
-    {
-        // Check if already processed
-        if ($order->payment_processed_at) {
-            return;
-        }
-
-        // Process payment
-        $this->paymentService->charge($order);
-
-        // Mark as processed
-        $order->update(['payment_processed_at' => now()]);
-    }
+    use SerializesModels;
+    
+    public function __construct(
+        public readonly Order $order
+    ) {}
 }
 ```
 
-### 2. Serialize Minimal Data
+### 2. Use Appropriate Queues
 
 ```php
-// Good - serialize only the ID
-#[Async]
-class ProcessOrderHandler
-{
-    public function __invoke(int $orderId)
-    {
-        $order = Order::findOrFail($orderId);
-        // Process
-    }
-}
+// Time-critical
+#[Async(queue: 'high')]
+class SendPaymentReceipt { }
 
-// Dispatch with ID
-Extensions::dispatch('order.process', $order->id);
+// Can wait
+#[Async(queue: 'low')]
+class GenerateReports { }
+
+// Resource-intensive
+#[Async(queue: 'heavy')]
+class ProcessImages { }
 ```
 
-### 3. Set Appropriate Timeouts
+### 3. Set Reasonable Timeouts
 
 ```php
-#[Async(timeout: 120)]  // 2 minutes
-class LongRunningHandler
-{
-    // ...
-}
+#[Async(timeout: 30)]   // Quick tasks
+#[Async(timeout: 300)]  // Medium tasks
+#[Async(timeout: 3600)] // Long-running tasks
 ```
