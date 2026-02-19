@@ -2,6 +2,8 @@
 layout: docs
 title: Graceful Mode
 description: Handle errors without breaking execution
+order: 20
+parent: "Safety"
 ---
 
 ## Overview

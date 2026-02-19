@@ -2,6 +2,8 @@
 layout: docs
 title: Registering Handlers
 description: How to register and manage extension handlers
+order: 10
+parent: "Handlers"
 ---
 
 ## Basic Registration

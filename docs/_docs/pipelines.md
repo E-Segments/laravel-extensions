@@ -1,7 +1,8 @@
 ---
 title: "Pipelines"
 description: "Chain handlers together with data transformation"
-order: 3
+order: 12
+parent: "Handlers"
 ---
 
 Pipelines allow you to chain multiple handlers together, passing data through each stage with optional transformations.

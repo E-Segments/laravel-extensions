@@ -2,6 +2,7 @@
 layout: docs
 title: Configuration
 description: Complete configuration reference
+order: 3
 ---
 
 ## Publishing Config

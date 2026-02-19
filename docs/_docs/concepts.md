@@ -2,6 +2,7 @@
 layout: docs
 title: Core Concepts
 description: Understanding the extension point architecture
+order: 2
 ---
 
 ## What Are Extension Points?

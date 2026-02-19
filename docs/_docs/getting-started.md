@@ -2,6 +2,7 @@
 layout: docs
 title: Getting Started
 description: Install and configure Laravel Extensions
+order: 1
 ---
 
 ## Installation

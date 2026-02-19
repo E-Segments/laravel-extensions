@@ -2,6 +2,8 @@
 layout: docs
 title: Strategies
 description: Control how handler results are aggregated
+order: 11
+parent: "Handlers"
 ---
 
 ## Overview

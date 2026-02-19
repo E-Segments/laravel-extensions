@@ -2,6 +2,8 @@
 layout: docs
 title: Circuit Breaker
 description: Prevent cascading failures with automatic handler protection
+order: 21
+parent: "Safety"
 ---
 
 ## Overview

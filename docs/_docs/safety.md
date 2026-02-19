@@ -1,7 +1,8 @@
 ---
 title: "Safety Features"
 description: "Circuit breakers, graceful execution, and error handling"
-order: 2
+order: 22
+parent: "Safety"
 ---
 
 Laravel Extensions provides multiple safety mechanisms to ensure your application remains stable even when handlers fail.

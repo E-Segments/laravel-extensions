@@ -2,6 +2,8 @@
 layout: docs
 title: Async Processing
 description: Execute handlers asynchronously via queues
+order: 30
+parent: "Advanced"
 ---
 
 ## Overview
